@@ -1,0 +1,39 @@
+# Environment
+.env
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Data (raw filings are large, re-download via script)
+data/raw/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Eval results (optional - may want to commit curated results)
+# eval/results/
+
+# SQLite databases
+*.db
+
+# ChromaDB / vector store
+chroma_data/
+
+# Jupyter
+.ipynb_checkpoints/
