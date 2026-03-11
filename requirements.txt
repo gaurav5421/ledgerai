@@ -14,7 +14,7 @@ lxml>=5.0.0
 chromadb>=0.5.0
 
 # UI
-streamlit>=1.40.0
+chainlit>=2.0.0
 
 # Dev / Testing
 pytest>=8.0.0

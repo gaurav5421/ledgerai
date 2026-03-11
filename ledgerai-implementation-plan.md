@@ -164,7 +164,7 @@ ledgerai/
 │       └── models.py          # Request/response schemas
 │
 ├── ui/
-│   └── app.py                 # Streamlit demo interface
+│   └── app.py                 # Chainlit demo interface
 │
 ├── tests/
 │   ├── test_guardrails.py     # Guardrail unit tests (critical — test what the agent refuses)
@@ -188,7 +188,7 @@ ledgerai/
 - [ ] Core dependencies: `fastapi`, `uvicorn`, `anthropic` (or `openai`), `sqlite3` (stdlib), `httpx`
 - [ ] Retrieval: `chromadb` or `qdrant-client` (local mode)
 - [ ] Parsing: `beautifulsoup4`, `lxml` for EDGAR HTML filings
-- [ ] UI: `streamlit`
+- [ ] UI: `chainlit`
 - [ ] Testing: `pytest`, `pytest-asyncio`
 - [ ] Set up pre-commit hooks (black, ruff, mypy)
 
@@ -475,7 +475,7 @@ Prepare 5 polished demo scenarios that showcase different capabilities:
 - [ ] All docs/ files complete and well-written, including both ADRs (001-single-agent.md, 002-no-framework.md)
 - [ ] Clean commit history (squash messy development commits)
 - [ ] `.env.example` with clear instructions for API keys
-- [ ] One-command setup: `pip install -r requirements.txt && python scripts/seed_data.py && streamlit run ui/app.py`
+- [ ] One-command setup: `pip install -r requirements.txt && python scripts/seed_data.py && chainlit run ui/app.py`
 
 ### 8.2 — Architecture Diagram
 - [ ] Create a clear diagram showing the flow: User Query → Scope Guard → Query Router → Retrieval (SQL + Vector) → Context Assembly → LLM Reasoning → Output Validation → Confidence Scoring → Structured Response

@@ -22,7 +22,7 @@ The current landscape includes Google ADK, LangGraph, CrewAI, AutoGen, and OpenA
 ## What Frameworks Solve That We Don't Need
 - Multi-agent coordination → we have one agent
 - Complex state machines with branching/looping → our flow is linear
-- Managed deployment to cloud → we're deploying a Streamlit demo
+- Managed deployment to cloud → we're deploying a Chainlit demo
 - Session persistence across millions of users → we're demoing to prospects
 
 ## When to Reconsider
