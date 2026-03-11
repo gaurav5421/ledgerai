@@ -103,5 +103,5 @@ User Query
 | Structured data | SQLite | Zero infrastructure, portable, sufficient for demo scale |
 | Vector store | ChromaDB (local) | Embedded mode, no server needed |
 | API | FastAPI | Async, auto-docs, Pydantic integration |
-| UI | Streamlit | Fast to build, good enough for demos |
+| UI | Chainlit | Polished chat UI out of the box, fits Q&A pattern. Upgrade path: Next.js + Tailwind if evolving to a full dashboard. |
 | Parsing | BeautifulSoup + lxml | SEC filings are HTML/XML |

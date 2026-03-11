@@ -79,7 +79,7 @@ anthropic Python SDK (LLM calls)
     + Your guardrail logic (scope checking, validation, confidence)
     + Your response formatting
     + FastAPI (API layer)
-    + Streamlit (demo UI)
+    + Chainlit (demo UI)
 ```
 
 No framework in between. Every decision is visible in the code.
@@ -87,7 +87,7 @@ No framework in between. Every decision is visible in the code.
 **What frameworks solve that you don't need:**
 - Multi-agent coordination → you have one agent
 - Complex state machines with branching/looping → your flow is linear
-- Managed deployment to cloud → you're deploying a Streamlit demo
+- Managed deployment to cloud → you're deploying a Chainlit demo
 - Session persistence across millions of users → you're demoing to prospects
 
 **When to reconsider:** If you productize this into a platform with multiple agent configurations per client, persistent sessions, cloud deployment at scale, and multi-agent coordination — then LangGraph or ADK earns its weight. Evaluate frameworks based on actual production needs at that point, not speculative ones now.
@@ -414,12 +414,15 @@ Design a response structure that demonstrates production readiness:
 
 ## Phase 6: Demo UI & Polish (Week 7)
 
-### 6.1 — Streamlit Interface
-- [ ] Clean, minimal UI — the sophistication should be in the agent, not the interface
+### 6.1 — Chainlit Interface
+- [ ] Clean, polished chat UI — the sophistication should be in the agent, not the interface
 - [ ] Chat interface with rendered response cards (answer, methodology, sources, confidence)
 - [ ] Visual confidence indicator (color-coded)
-- [ ] Clickable follow-up suggestions
-- [ ] Example questions panel for first-time users
+- [ ] Clickable follow-up suggestions (Chainlit Actions)
+- [ ] Example questions panel for first-time users (Chainlit Starters)
+- [ ] Custom theme/branding for a professional look
+
+> **Upgrade path:** If the UI needs to evolve beyond Q&A into a full dashboard with charts, tables, and multi-page navigation, migrate to Next.js + Tailwind CSS.
 
 ### 6.2 — Demo Scenarios
 Prepare 5 polished demo scenarios that showcase different capabilities:
@@ -435,7 +438,7 @@ Prepare 5 polished demo scenarios that showcase different capabilities:
 - [ ] Take clean screenshots of each response type (high-confidence, low-confidence, refusal)
 - [ ] Add these to the README
 
-**Milestone:** A demo-ready Streamlit app with 5 polished scenarios and visual assets for the README and blog post.
+**Milestone:** A demo-ready Chainlit app with 5 polished scenarios and visual assets for the README and blog post.
 
 ---
 

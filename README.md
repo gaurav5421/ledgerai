@@ -64,7 +64,7 @@ python scripts/download_filings.py
 python scripts/seed_data.py
 
 # Launch the demo
-streamlit run ui/app.py
+chainlit run ui/app.py
 ```
 
 ## Covered Companies
