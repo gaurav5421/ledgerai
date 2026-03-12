@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Quick interactive demo of LedgerAI agent."""
+"""Quick interactive demo of LedgerAI agent.
+
+Supports multi-turn investigation with:
+- Numbered follow-up selection (type 1, 2, or 3 to select)
+- Decomposition queries ("Why did X change?")
+- Session state across turns
+"""
 
 import os
 import sys
@@ -17,6 +23,8 @@ def main():
     print("=" * 60)
     print("  LedgerAI — Financial Analysis Agent")
     print("  Type 'quit' to exit, 'help' for example questions")
+    print("  Type 'new' to start a fresh investigation")
+    print("  Type a number (1-3) to select a follow-up")
     print("=" * 60)
 
     try:
@@ -31,12 +39,17 @@ def main():
         "Compare operating margins for AAPL, MSFT, and GOOGL",
         "Should I buy Apple stock?",
         "What was JPMorgan's net income?",
-        "Why did Amazon's net income change recently?",
+        "Why did Amazon's operating margin change recently?",
     ]
 
     while True:
         try:
-            query = input("\nYou: ").strip()
+            # Show turn count if in an active investigation
+            if agent.session.turn_count > 0:
+                prompt = f"\nYou (turn {agent.session.turn_count + 1}): "
+            else:
+                prompt = "\nYou: "
+            query = input(prompt).strip()
         except (EOFError, KeyboardInterrupt):
             print("\nGoodbye!")
             break
@@ -46,10 +59,18 @@ def main():
         if query.lower() == "quit":
             print("Goodbye!")
             break
+        if query.lower() == "new":
+            agent.new_session()
+            print("\n--- New investigation started ---")
+            continue
         if query.lower() == "help":
             print("\nExample questions:")
             for ex in examples:
                 print(f"  - {ex}")
+            print("\nDuring an investigation:")
+            print("  - Type a number (1-3) to select a follow-up suggestion")
+            print("  - Ask 'why' to decompose a metric change")
+            print("  - Type 'new' to start a fresh investigation")
             continue
 
         print()

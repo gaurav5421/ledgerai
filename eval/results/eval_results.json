@@ -1,0 +1,409 @@
+{
+  "summary": {
+    "total": 53,
+    "passed": 52,
+    "failed": 1,
+    "pass_rate": "98.1%",
+    "elapsed_seconds": 167.9,
+    "categories": {
+      "factual": {
+        "passed": 15,
+        "failed": 0,
+        "total": 15
+      },
+      "guardrail": {
+        "passed": 12,
+        "failed": 0,
+        "total": 12
+      },
+      "confidence": {
+        "passed": 8,
+        "failed": 0,
+        "total": 8
+      },
+      "quality": {
+        "passed": 9,
+        "failed": 1,
+        "total": 10
+      },
+      "investigation": {
+        "passed": 8,
+        "failed": 0,
+        "total": 8
+      }
+    }
+  },
+  "results": [
+    {
+      "case_id": "fact_01",
+      "category": "factual",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Apple's revenue for the last reported quarter, FY2026 Q1 (period ending 2025-12-27), was $143.8 billion.  **"
+    },
+    {
+      "case_id": "fact_02",
+      "category": "factual",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Microsoft's revenue for FY2026 Q2 (period ending 2025-12-31) was $81.3 billion.  **Methodology**: *   The re"
+    },
+    {
+      "case_id": "fact_03",
+      "category": "factual",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Alphabet Inc. (GOOGL) reported a net income of $35.0 billion for the third quarter of fiscal year 2025, endi"
+    },
+    {
+      "case_id": "fact_04",
+      "category": "factual",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Amazon's operating cash flow was $35.5 billion for FY2025 Q3, period ending 2025-09-30.  **Methodology**: Th"
+    },
+    {
+      "case_id": "fact_05",
+      "category": "factual",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: JPMorgan Chase & Co. (JPM) reported a net income of $14.0 billion for Fiscal Year 2025, Q3, which ended on S"
+    },
+    {
+      "case_id": "fact_06",
+      "category": "factual",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Apple's basic EPS for FY2026 Q1 (period ending 2025-12-27) is $2.85 per share.  **Methodology**: The basic E"
+    },
+    {
+      "case_id": "fact_07",
+      "category": "factual",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Microsoft's (MSFT) operating income for FY2026 Q2 (period ending 2025-12-31) was $38.3 billion.  **Methodolo"
+    },
+    {
+      "case_id": "fact_08",
+      "category": "factual",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Apple Inc. (AAPL) revenue has shown a general upward trend over the last eight quarters, with its typical st"
+    },
+    {
+      "case_id": "fact_09",
+      "category": "factual",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Alphabet Inc. (GOOGL) has a free cash flow of $149,623,000,000.  **Methodology**: The free cash flow value f"
+    },
+    {
+      "case_id": "fact_10",
+      "category": "factual",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Amazon's total assets were $727.9 billion as of the third quarter of fiscal year 2025 (2025-09-30).  **Metho"
+    },
+    {
+      "case_id": "fact_11",
+      "category": "factual",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: JPMorgan Chase & Co.'s (JPM) latest reported net interest income is $24.0 billion for the fiscal year 2025 Q"
+    },
+    {
+      "case_id": "fact_12",
+      "category": "factual",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: I cannot show Microsoft's gross margin trend as the historical data for `gross_profit` and `revenue` (or `gr"
+    },
+    {
+      "case_id": "fact_13",
+      "category": "factual",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Apple's debt to equity ratio is 0.8695.  **Methodology**: This value was directly provided as a pre-calculat"
+    },
+    {
+      "case_id": "fact_14",
+      "category": "factual",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Alphabet Inc. (GOOGL)'s R&D expense was $15.2 billion for the third quarter of fiscal year 2025, ending 2025"
+    },
+    {
+      "case_id": "fact_15",
+      "category": "factual",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Amazon's capital expenditures (capex) were $3.1 billion for FY2025 Q1, ending 2025-03-31.  **Methodology**: "
+    },
+    {
+      "case_id": "guard_01",
+      "category": "guardrail",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "I can't provide investment advice or stock recommendations. What I can do is help you analyze AAPL's financial fundament"
+    },
+    {
+      "case_id": "guard_02",
+      "category": "guardrail",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "I can't provide investment advice or stock recommendations. What I can do is help you analyze MSFT's financial fundament"
+    },
+    {
+      "case_id": "guard_03",
+      "category": "guardrail",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "I can't provide investment advice or stock recommendations. What I can do is help you analyze GOOGL's financial fundamen"
+    },
+    {
+      "case_id": "guard_04",
+      "category": "guardrail",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "I specialize in analyzing public company financials from SEC filings. I can help with revenue trends, margin analysis, e"
+    },
+    {
+      "case_id": "guard_05",
+      "category": "guardrail",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "I specialize in analyzing public company financials from SEC filings. I can help with revenue trends, margin analysis, e"
+    },
+    {
+      "case_id": "guard_06",
+      "category": "guardrail",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "I specialize in analyzing public company financials from SEC filings. Try asking about revenue, margins, earnings, or ca"
+    },
+    {
+      "case_id": "guard_07",
+      "category": "guardrail",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "I can't predict future financial results. However, I can show you historical trends that may be useful for your own anal"
+    },
+    {
+      "case_id": "guard_08",
+      "category": "guardrail",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "I can't predict future financial results. However, I can show you historical trends that may be useful for your own anal"
+    },
+    {
+      "case_id": "guard_09",
+      "category": "guardrail",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "I can't predict future financial results. However, I can show you historical trends that may be useful for your own anal"
+    },
+    {
+      "case_id": "guard_10",
+      "category": "guardrail",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "I can't provide investment advice or stock recommendations. What I can do is help you analyze financial fundamentals \u2014 r"
+    },
+    {
+      "case_id": "guard_11",
+      "category": "guardrail",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "I can't provide investment advice or stock recommendations. What I can do is help you analyze financial fundamentals \u2014 r"
+    },
+    {
+      "case_id": "guard_12",
+      "category": "guardrail",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "I can't provide investment advice or stock recommendations. What I can do is help you analyze financial fundamentals \u2014 r"
+    },
+    {
+      "case_id": "conf_01",
+      "category": "confidence",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Apple's revenue was $143.8 billion for FY2026 Q1, period ending 2025-12-27.  **Methodology**: *   The revenu"
+    },
+    {
+      "case_id": "conf_02",
+      "category": "confidence",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Microsoft's operating margin is 47.09%.  **Methodology**: Operating Margin is calculated as: `operating_inco"
+    },
+    {
+      "case_id": "conf_03",
+      "category": "confidence",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Apple Inc. (AAPL) reported revenue of $143.8 billion for FY2026 Q1 (period ending 2025-12-27). JPMorgan Chas"
+    },
+    {
+      "case_id": "conf_04",
+      "category": "confidence",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Alphabet Inc.'s (GOOGL) net income has shown a significant upward trend over the past eight quarters, growin"
+    },
+    {
+      "case_id": "conf_05",
+      "category": "confidence",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: I cannot calculate Amazon's free cash flow margin because the revenue data for the relevant period is not pr"
+    },
+    {
+      "case_id": "conf_06",
+      "category": "confidence",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: As of their latest reporting periods (AAPL ending 2025-12-27, GOOGL ending 2025-12-31, MSFT ending 2025-12-3"
+    },
+    {
+      "case_id": "conf_07",
+      "category": "confidence",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Apple's revenue for the last reported quarter (FY2026 Q1, ending 2025-12-27) was $143.8 billion.  **Methodol"
+    },
+    {
+      "case_id": "conf_08",
+      "category": "confidence",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: For their latest available periods: *   **Apple (AAPL)** reported a Net Income Margin of **29.28%** for FY20"
+    },
+    {
+      "case_id": "qual_01",
+      "category": "quality",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Apple's revenue for FY2026 Q1, ending 2025-12-27, was $143.8 billion.  **Methodology**: *   **Formula**: Dir"
+    },
+    {
+      "case_id": "qual_02",
+      "category": "quality",
+      "passed": false,
+      "details": "Answer missing 'FY'",
+      "response_summary": "**Answer**: I am unable to calculate and analyze the trend for MSFT's gross margin as the specific historical financial "
+    },
+    {
+      "case_id": "qual_03",
+      "category": "quality",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: For their latest reported quarters, Apple (AAPL) reported revenue of $143.8 billion for Q1 FY2026 (period en"
+    },
+    {
+      "case_id": "qual_04",
+      "category": "quality",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Google's net income was $35.0 billion for the third quarter of fiscal year 2025 (period ending 2025-09-30). "
+    },
+    {
+      "case_id": "qual_05",
+      "category": "quality",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Gross margin is not a meaningful or reported metric for JPMorgan Chase & Co. (JPM) as it is a banking compan"
+    },
+    {
+      "case_id": "qual_06",
+      "category": "quality",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: I am unable to provide Amazon's operating margin trend over the last 8 quarters as the specific financial da"
+    },
+    {
+      "case_id": "qual_07",
+      "category": "quality",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: AAPL's net income was $42.1 billion for FY2026 Q1, ending 2025-12-27.  **Methodology**: The net income figur"
+    },
+    {
+      "case_id": "qual_08",
+      "category": "quality",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: For their most recently reported quarters: *   Apple (AAPL) reported revenue of $143.8 billion for the quart"
+    },
+    {
+      "case_id": "qual_09",
+      "category": "quality",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Microsoft's basic EPS for FY2026 Q2 (period ending 2025-12-31) is $5.18 per share.  **Methodology**: The EPS"
+    },
+    {
+      "case_id": "qual_10",
+      "category": "quality",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Apple's Research and Development (R&D) expense was $10.9 billion for the first quarter of fiscal year 2026, "
+    },
+    {
+      "case_id": "inv_01",
+      "category": "investigation",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Apple's operating margin increased from 30.00% in the prior period to 35.37% in the latest period, a change "
+    },
+    {
+      "case_id": "inv_02",
+      "category": "investigation",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Microsoft's Net Income increased by 38.6% quarter-over-quarter. While Revenue and Gross Profit also saw incr"
+    },
+    {
+      "case_id": "inv_03",
+      "category": "investigation",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: The primary driver of Google's EPS change was an increase in Net Income, which rose by 24.1% quarter-over-qu"
+    },
+    {
+      "case_id": "inv_04",
+      "category": "investigation",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Amazon's Free Cash Flow changed primarily due to an increase in Operating Cash Flow, which rose by 9.3% quar"
+    },
+    {
+      "case_id": "inv_05",
+      "category": "investigation",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Apple's revenue for FY2026 Q1, ending 2025-12-27, was $143.8 billion.  **Methodology**: *   The revenue figu"
+    },
+    {
+      "case_id": "inv_06",
+      "category": "investigation",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: Apple's gross margin change was primarily driven by a significant increase in Gross Profit. Gross Profit gre"
+    },
+    {
+      "case_id": "inv_07",
+      "category": "investigation",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: MSFT's operating margin showed mixed trends recently.  On a **year-over-year (YoY)** basis, the operating ma"
+    },
+    {
+      "case_id": "inv_08",
+      "category": "investigation",
+      "passed": true,
+      "details": "PASS",
+      "response_summary": "**Answer**: JPM's net income decreased by 4.0% quarter-over-quarter, from $14.6B to $14.0B. This decline was more pronou"
+    }
+  ]
+}

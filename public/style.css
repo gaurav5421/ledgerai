@@ -1,0 +1,21 @@
+/* LedgerAI Custom Theme */
+
+/* Confidence badges */
+code {
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+}
+
+/* Make actions (follow-up buttons) more prominent */
+.actions-container {
+    margin-top: 8px;
+}
+
+/* Decomposition section styling */
+hr {
+    margin: 16px 0;
+    border-color: rgba(255, 255, 255, 0.1);
+}

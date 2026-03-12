@@ -1,8 +1,14 @@
 """Response formatting — structures agent output with answer, methodology, sources, confidence."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from src.guardrails.confidence import ConfidenceLevel, ConfidenceScore
+
+if TYPE_CHECKING:
+    from src.investigation.decomposition import DecompositionResult
 
 
 @dataclass
@@ -15,6 +21,7 @@ class AgentResponse:
     warnings: list[str] = field(default_factory=list)
     is_refusal: bool = False
     raw_data: dict | None = None  # For API consumers
+    decomposition: DecompositionResult | None = None
 
     def format_text(self) -> str:
         """Format as readable text for CLI / chat display."""
@@ -46,11 +53,15 @@ class AgentResponse:
             for w in self.warnings:
                 parts.append(f"- {w}")
 
+        # Decomposition
+        if self.decomposition:
+            parts.append(f"\n{self.decomposition.format_text()}")
+
         # Follow-ups
         if self.follow_ups:
             parts.append("\n**Explore Further**")
-            for f in self.follow_ups:
-                parts.append(f"-> {f}")
+            for i, f in enumerate(self.follow_ups, 1):
+                parts.append(f"  {i}. {f}")
 
         return "\n".join(parts)
 
@@ -70,6 +81,7 @@ class AgentResponse:
             "follow_ups": self.follow_ups,
             "warnings": self.warnings,
             "is_refusal": self.is_refusal,
+            "decomposition": self.decomposition.format_text() if self.decomposition else None,
         }
 
 

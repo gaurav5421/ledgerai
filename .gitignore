@@ -31,9 +31,14 @@ Thumbs.db
 
 # SQLite databases
 *.db
+*.db-shm
+*.db-wal
 
 # ChromaDB / vector store
 chroma_data/
+
+# Chainlit internal
+.files/
 
 # Jupyter
 .ipynb_checkpoints/

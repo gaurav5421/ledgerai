@@ -51,6 +51,9 @@ from src.guardrails.confidence import (
 )
 from src.guardrails.provenance import ProvenanceRecord, build_fiscal_label
 from src.guardrails.scope_guard import ScopeLevel, check_scope
+from src.investigation.decomposition import decompose_metric_change, has_decomposition
+from src.investigation.follow_ups import generate_contextual_follow_ups
+from src.investigation.session import InvestigationDepth, InvestigationSession
 
 logger = logging.getLogger(__name__)
 
@@ -126,10 +129,15 @@ class LedgerAIAgent:
     def __init__(self, db_path: Path | None = None):
         self.conn = get_db(db_path)
         self.llm_client, self.llm_provider = _try_init_llm()
+        self.session = InvestigationSession()
         if self.llm_client:
             logger.info(f"LLM enabled: {self.llm_provider}")
         else:
             logger.info("Running without LLM — using data-driven responses")
+
+    def new_session(self) -> None:
+        """Start a fresh investigation session."""
+        self.session = InvestigationSession()
 
     def _call_llm(self, system: str, user_query: str) -> str | None:
         """Call the LLM if available. Returns response text or None."""
@@ -139,7 +147,7 @@ class LedgerAIAgent:
         try:
             if self.llm_provider == "gemini":
                 response = self.llm_client.models.generate_content(
-                    model="gemini-2.0-flash",
+                    model="gemini-2.5-flash",
                     contents=f"{system}\n\n---\n\nUser question: {user_query}",
                 )
                 return response.text
@@ -158,6 +166,16 @@ class LedgerAIAgent:
     def query(self, user_query: str) -> AgentResponse:
         """Process a user query through the full pipeline."""
         logger.info(f"Processing query: {user_query}")
+
+        # Check if user is selecting a follow-up by number
+        follow_up_idx = self.session.is_follow_up_selection(user_query)
+        if follow_up_idx is not None:
+            last_follow_ups = self.session.get_last_follow_ups()
+            if follow_up_idx < len(last_follow_ups):
+                selected = last_follow_ups[follow_up_idx]
+                # Strip any [decompose]/[analyze] tags for the actual query
+                user_query = selected.split(" [")[0]
+                logger.info(f"Follow-up selected: {user_query}")
 
         # Step 1: Scope Guard
         scope = check_scope(user_query)
@@ -220,6 +238,27 @@ class LedgerAIAgent:
                 )
                 context_parts.append(f"## Seasonality for {ticker}\n{note_text}")
 
+        # Investigation context from prior turns
+        session_context = self.session.build_context_summary()
+        if session_context:
+            context_parts.append(session_context)
+
+        # Step 3b: Decomposition (if query asks "why" about a metric)
+        depth = self.session.classify_depth(
+            user_query, tickers, relevant_metrics or retrieved_metrics
+        )
+        decomposition_result = None
+        if depth == InvestigationDepth.DECOMPOSITION:
+            # Find which metric to decompose
+            decomp_metrics = relevant_metrics or retrieved_metrics
+            for metric_id in decomp_metrics:
+                if has_decomposition(metric_id):
+                    result = decompose_metric_change(self.conn, tickers[0], metric_id)
+                    if result:
+                        decomposition_result = result
+                        context_parts.append(f"## Decomposition Analysis\n{result.format_text()}")
+                        break
+
         # Step 4: LLM Call (optional) or build data-driven answer
         context_str = "\n\n".join(context_parts)
         system = SYSTEM_PROMPT.format(context=context_str)
@@ -269,8 +308,19 @@ class LedgerAIAgent:
         ]
         confidence = compute_confidence(factors)
 
-        # Step 6: Build response
-        follow_ups = self._generate_follow_ups(tickers, relevant_metrics or retrieved_metrics)
+        # Step 6: Build response with contextual follow-ups
+        answer_metrics = relevant_metrics or retrieved_metrics
+        follow_ups = generate_contextual_follow_ups(self.conn, tickers, answer_metrics, user_query)
+
+        # Record this turn in the session
+        self.session.record_turn(
+            query=user_query,
+            tickers=tickers,
+            metrics=answer_metrics,
+            depth=depth,
+            follow_ups=follow_ups,
+            decomposition_metric=(decomposition_result.metric_id if decomposition_result else None),
+        )
 
         return AgentResponse(
             answer=answer_text,
@@ -279,6 +329,7 @@ class LedgerAIAgent:
             confidence=confidence,
             follow_ups=follow_ups,
             warnings=comparison_warnings,
+            decomposition=decomposition_result,
         )
 
     def _build_data_answer(
@@ -617,33 +668,6 @@ class LedgerAIAgent:
                             data_lines.append(f"{ticker} — {metric_id} (calculated): {value:.4f}")
 
         return "\n".join(data_lines), provenance, list(set(retrieved_metrics))
-
-    def _generate_follow_ups(self, tickers: list[str], metrics: list[str]) -> list[str]:
-        """Generate contextual follow-up suggestions."""
-        follow_ups = []
-
-        if len(tickers) == 1:
-            ticker = tickers[0]
-            if "revenue" in metrics:
-                follow_ups.append(f"How has {ticker}'s revenue trended over the last 8 quarters?")
-            if any(m in metrics for m in ("gross_margin", "operating_margin", "net_margin")):
-                follow_ups.append(f"What's driving {ticker}'s margin changes?")
-            comparables = get_company_context(ticker)
-            if comparables and comparables.comparable_companies:
-                peers = ", ".join(comparables.comparable_companies[:2])
-                follow_ups.append(f"Compare {ticker} margins with {peers}")
-        elif len(tickers) > 1:
-            follow_ups.append(
-                "How have these companies' revenue growth rates compared over the last 2 years?"
-            )
-
-        if not follow_ups:
-            follow_ups = [
-                f"Show {tickers[0]}'s key financial metrics for the latest quarter",
-                f"What are {tickers[0]}'s revenue trends?",
-            ]
-
-        return follow_ups[:3]
 
     def close(self):
         self.conn.close()
