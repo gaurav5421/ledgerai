@@ -829,6 +829,26 @@ class LedgerAIAgent:
                                 value=row["value"],
                                 unit=row["unit"],
                             )
+                    else:
+                        # Derived metrics (margins, ratios) aren't stored directly
+                        derived = self._compute_derived_trend(ticker, metric_id)
+                        if derived:
+                            retrieved_metrics.append(metric_id)
+                            n = len(derived)
+                            data_lines.append(
+                                f"\n{ticker} — {metric_id} " f"(last {n} periods, calculated):"
+                            )
+                            for label, period_end, val in derived:
+                                data_lines.append(f"  {label} ({period_end}): {val:.4f}")
+                                provenance.add_source(
+                                    ticker=ticker,
+                                    filing_type="10-K/10-Q",
+                                    period_end=period_end,
+                                    fiscal_label=label,
+                                    metric=metric_id,
+                                    value=val,
+                                    unit="ratio",
+                                )
                 else:
                     row = fetch_latest_metric(self.conn, ticker, metric_id)
                     if row:
