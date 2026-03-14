@@ -17,7 +17,10 @@ flowchart TD
     SG -->|Out of scope| R[Graceful Refusal\nwith suggestions]
     SG -->|In scope| CA[Context Assembly\nContextPackage]
     CA --> RET[Data Retrieval]
-    RET --> SQL[(SQLite)]
+    RET --> KW{Keyword\nmatch?}
+    KW -->|Yes| SQL[(SQLite)]
+    KW -->|No| IC[LLM Intent\nClassifier]
+    IC --> SQL
     CA --> MR[Metric Registry]
     CA --> DR[Domain Rules]
     CA --> EC[Entity Context]
@@ -60,7 +63,8 @@ User Query
 │    Context Assembly → ContextPackage │
 │  ┌─────────────────────────────────┐ │
 │  │     Retrieval Layer             │ │
-│  │  SQLite ←──── keyword matching  │ │
+│  │  SQLite ←── keywords + LLM     │ │
+│  │             intent classifier   │ │
 │  └─────────────┬───────────────────┘ │
 │  + Metric definitions & formulas     │
 │  + Domain rules (fiscal years, etc.) │
@@ -152,6 +156,7 @@ User Query
 - **Orchestration** (`src/agent/core.py`) — pipeline logic connecting all components via `ContextPackage` dataclass. The `_assemble_context()` method makes the retrieval → assembly → LLM dependency chain explicit
 - **ContextPackage** (`src/agent/core.py`) — dataclass holding all assembled context (data, provenance, metrics, warnings, decomposition, tickers, scope) — the single input to both confidence scoring and LLM
 - **Retrieval** (`src/agent/retrieval.py`) — SQL queries for financial data, derived metric calculations, with `force_broad` mode for low-confidence retries
+- **Intent Classification** (`src/agent/core.py:_classify_query_intent`) — lightweight LLM fallback when keyword matching doesn't identify trend/metric intent; keywords remain as a zero-latency fast path
 - **Response** (`src/agent/response.py`) — structured output formatting
 
 ## Technology Stack
@@ -170,7 +175,7 @@ User Query
 ## Design Constraints
 
 1. **No framework** — orchestration is explicit Python, not abstracted behind a framework
-2. **Single agent** — one LLM call per query (occasionally two for complex decomposition)
+2. **Single agent** — one LLM call per query (occasionally two for decomposition or intent classification)
 3. **Deterministic when possible** — metric calculations, decomposition, follow-ups are all Python, not LLM-generated
 4. **Portable** — no cloud services required; everything runs locally with SQLite and ChromaDB
 5. **Honest** — confidence scoring, refusals, and the failure catalog exist to show where the system works and where it doesn't
