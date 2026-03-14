@@ -453,7 +453,22 @@ class LedgerAIAgent:
 
         is_trend = any(
             kw in query_lower
-            for kw in ["trend", "over time", "last", "quarters", "history", "trended"]
+            for kw in [
+                "trend",
+                "over time",
+                "last",
+                "quarters",
+                "history",
+                "trended",
+                "by quarter",
+                "quarterly",
+                "each quarter",
+                "per quarter",
+                "q1",
+                "q2",
+                "q3",
+                "q4",
+            ]
         )
         is_comparison = len(tickers) > 1
 
@@ -715,7 +730,22 @@ class LedgerAIAgent:
         # Determine if trend or single period
         is_trend = any(
             kw in query_lower
-            for kw in ["trend", "over time", "last", "quarters", "history", "trended"]
+            for kw in [
+                "trend",
+                "over time",
+                "last",
+                "quarters",
+                "history",
+                "trended",
+                "by quarter",
+                "quarterly",
+                "each quarter",
+                "per quarter",
+                "q1",
+                "q2",
+                "q3",
+                "q4",
+            ]
         )
 
         for ticker in tickers:
