@@ -1,12 +1,15 @@
 """Output Validation — sanity checks on agent responses.
 
 Checks calculated values are within plausible ranges, cross-references
-with the database, and verifies internal consistency.
+with the database, verifies internal consistency, and validates LLM
+faithfulness against source data.
 """
 
+import re
 from dataclasses import dataclass
 
 from src.context.metric_registry import get_metric
+from src.guardrails.provenance import ProvenanceRecord
 
 
 @dataclass
@@ -135,3 +138,120 @@ def _industry_matches(ticker: str, industry_key: str) -> bool:
 
     company_industry = get_company_industry(ticker)
     return industry_key in company_industry or company_industry in industry_key
+
+
+# ============================================================
+# Faithfulness Validation — cross-reference LLM claims vs source data
+# ============================================================
+
+# Patterns to extract numerical claims from LLM text
+_DOLLAR_PATTERN = re.compile(
+    r"\$\s*([\d,]+(?:\.\d+)?)\s*(T|B|M|K|trillion|billion|million|thousand)?",
+    re.IGNORECASE,
+)
+_PERCENT_PATTERN = re.compile(r"([\d]+(?:\.\d+)?)\s*%")
+
+_MULTIPLIERS = {
+    "t": 1e12,
+    "trillion": 1e12,
+    "b": 1e9,
+    "billion": 1e9,
+    "m": 1e6,
+    "million": 1e6,
+    "k": 1e3,
+    "thousand": 1e3,
+}
+
+
+def _parse_dollar(match: re.Match) -> float:
+    """Parse a dollar amount from a regex match into raw float."""
+    num_str = match.group(1).replace(",", "")
+    value = float(num_str)
+    suffix = match.group(2)
+    if suffix:
+        value *= _MULTIPLIERS.get(suffix.lower(), 1)
+    return value
+
+
+def _parse_percent(match: re.Match) -> float:
+    """Parse a percentage value into decimal form (e.g., 45.2% → 0.452)."""
+    return float(match.group(1)) / 100.0
+
+
+def _closest_source_value(
+    claimed: float, sources: list, unit_filter: str, tolerance: float = 0.05
+) -> tuple[float | None, bool]:
+    """Find the closest source value matching the unit filter.
+
+    Returns (closest_value, is_within_tolerance).
+    """
+    candidates = [s for s in sources if s.unit == unit_filter]
+    if not candidates:
+        return None, True  # No source to compare — can't flag
+
+    # Find the closest match
+    closest = min(candidates, key=lambda s: abs(s.value - claimed))
+    if closest.value == 0:
+        return closest.value, abs(claimed) < 1e6  # Tolerance for zero
+
+    rel_diff = abs(claimed - closest.value) / abs(closest.value)
+    return closest.value, rel_diff <= tolerance
+
+
+def validate_faithfulness(
+    llm_response: str,
+    provenance: ProvenanceRecord,
+    tolerance: float = 0.05,
+) -> ValidationResult:
+    """Cross-reference numerical claims in LLM output against source data.
+
+    Extracts dollar amounts and percentages from the response text,
+    then checks each against the provenance record. Flags mismatches
+    where the LLM's number differs from the source by more than `tolerance`
+    (default 5%).
+
+    Returns:
+        ValidationResult with is_valid=False if any hard mismatches found.
+    """
+    if not provenance or not provenance.sources:
+        return ValidationResult(True, [], [])
+
+    warnings = []
+    errors = []
+
+    # Extract dollar claims
+    for match in _DOLLAR_PATTERN.finditer(llm_response):
+        claimed = _parse_dollar(match)
+        source_val, ok = _closest_source_value(claimed, provenance.sources, "USD", tolerance)
+        if source_val is not None and not ok:
+            rel_diff = abs(claimed - source_val) / abs(source_val) * 100
+            if rel_diff > 20:
+                errors.append(
+                    f"LLM claimed {match.group(0)} but closest source value is "
+                    f"${source_val/1e9:.1f}B (diff: {rel_diff:.1f}%)"
+                )
+            else:
+                warnings.append(
+                    f"LLM stated {match.group(0)}, source shows "
+                    f"${source_val/1e9:.1f}B (diff: {rel_diff:.1f}%)"
+                )
+
+    # Extract percentage claims
+    for match in _PERCENT_PATTERN.finditer(llm_response):
+        claimed = _parse_percent(match)
+        source_val, ok = _closest_source_value(claimed, provenance.sources, "percentage", tolerance)
+        if source_val is not None and not ok:
+            rel_diff = abs(claimed - source_val) / abs(source_val) * 100 if source_val else 0
+            if rel_diff > 20:
+                errors.append(
+                    f"LLM claimed {match.group(0)}, but source shows "
+                    f"{source_val*100:.1f}% (diff: {rel_diff:.1f}%)"
+                )
+            else:
+                warnings.append(
+                    f"LLM stated {match.group(0)}, source shows "
+                    f"{source_val*100:.1f}% (diff: {rel_diff:.1f}%)"
+                )
+
+    is_valid = len(errors) == 0
+    return ValidationResult(is_valid, warnings, errors)

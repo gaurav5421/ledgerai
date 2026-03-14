@@ -18,22 +18,23 @@ Most AI agents work in demos but fail in production. The gap isn't in the LLM �
 flowchart TD
     Q[User Query] --> SG[Scope Guard]
     SG -->|Out of scope| R[Graceful Refusal]
-    SG -->|In scope| RT[Query Router]
-    RT --> RET[Retrieval Layer]
+    SG -->|In scope| CA[Context Assembly\nContextPackage]
+    CA --> RET[Retrieval Layer]
     RET --> SQL[(SQLite\n5,592 line items)]
-    RET --> CA[Context Assembly]
     CA --> MR[Metric Registry\n25 metrics]
     CA --> DR[Domain Rules\nSeasonality, fiscal years]
     CA --> EC[Entity Context\nSegments, events]
-    CA --> LLM[LLM Reasoning\nGemini / Claude]
+    CA --> CS[Pre-LLM\nConfidence Check]
+    CS -->|REFUSE| BAIL[Insufficient Data\nRefusal]
+    CS -->|LOW + poor data| RETRY[Retry broader]
+    CS -->|OK| LLM[LLM Reasoning\nGemini / Claude]
+    RETRY --> LLM
     CA -->|No API key| DET[Deterministic\nFallback]
-    LLM --> OV[Output Validation]
-    DET --> OV
-    OV --> CS[Confidence Scoring\n5-factor evaluation]
-    CS --> INV{Decomposition\ntriggered?}
-    INV -->|Yes| DEC[Metric Decomposition\nComponent analysis]
-    INV -->|No| FU[Follow-up Generation]
-    DEC --> FU
+    LLM --> FV[Faithfulness\nValidation]
+    DET --> FV
+    FV -->|Mismatch| FB[Data-driven\nfallback]
+    FV -->|OK| FU[Follow-up Generation]
+    FB --> FU
     FU --> SR[Structured Response]
     SR --> ANS[Answer + Methodology\n+ Sources + Confidence\n+ Follow-ups]
 ```
@@ -45,7 +46,8 @@ The reliability layer is the product, not an afterthought:
 | Layer | What It Does | Why It Matters |
 |-------|-------------|----------------|
 | **Metric Registry** | 25 financial metrics with formulas, caveats, comparability rules | The agent doesn't improvise what "gross margin" means — it looks it up |
-| **Confidence Scoring** | 5-factor structured evaluation (data availability, complexity, temporal relevance, comparability, ambiguity) | Not a vibe check — calibrated scores with clear reasoning |
+| **Confidence Scoring** | 5-factor evaluation runs *before* the LLM — bail-out on REFUSE, retry on LOW, disclaimer on uncertainty | Not a vibe check — calibrated scores that gate the pipeline |
+| **Faithfulness Validation** | Cross-references LLM dollar amounts and percentages against source data | Catches hallucinated numbers; falls back to data-driven answer on mismatch |
 | **Provenance Tracking** | Every claim tagged with source filing, period, and calculation chain | Full audit trail from answer back to SEC filing |
 | **Scope Guard** | Regex-based query classification with graceful refusals | Refuses investment advice, predictions, and non-financial questions with helpful redirects |
 | **Investigation Workflows** | Predefined decomposition paths for 10+ metrics | When operating margin changes, breaks it into revenue vs. R&D vs. SGA contributions |
@@ -105,7 +107,7 @@ Run the eval suite yourself:
 python eval/eval_suite.py
 ```
 
-Run the test suite (168 tests):
+Run the test suite (187 tests):
 
 ```bash
 pytest tests/ -v
@@ -133,7 +135,7 @@ src/
 ├── investigation/  # Metric decomposition, contextual follow-ups, session state
 └── ingestion/      # SEC EDGAR client, filing parser, data storage
 
-tests/              # 168 pytest tests (unit + integration)
+tests/              # 187 pytest tests (unit + integration)
 eval/               # 53-case evaluation suite with results
 ui/                 # Chainlit chat interface
 docs/               # Architecture, ADRs, guardrails, failure catalog
@@ -158,7 +160,7 @@ scripts/            # Data download, seeding, CLI demo
 | API | FastAPI | Async, auto-docs, Pydantic |
 | UI | Chainlit | Polished chat UI, actions, starters |
 | Parsing | BeautifulSoup + lxml | SEC filings are HTML/XML |
-| Tests | pytest | 168 tests + 53-case eval suite |
+| Tests | pytest | 187 tests + 53-case eval suite |
 
 ## License
 

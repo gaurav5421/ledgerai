@@ -2,17 +2,17 @@
 
 Single agent with modular components. The flow:
 1. Scope Guard → is this in-scope?
-2. Query Router → what data do we need?
-3. Retrieval → fetch from SQLite
-4. Context Assembly → attach metric defs, domain rules
-5. LLM Reasoning → API call (optional — works without it)
-6. Output Validation → sanity checks
-7. Confidence Scoring → structured evaluation
-8. Response Formatting → structured output
+2. Context Assembly → retrieve data + attach metric defs, domain rules
+3. Pre-LLM Confidence Check → bail out or retry if confidence too low
+4. LLM Reasoning → API call (optional — works without it)
+5. Faithfulness Validation → cross-reference LLM claims against source data
+6. Confidence Scoring → structured evaluation (final)
+7. Response Formatting → structured output
 """
 
 import logging
 import os
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -42,6 +42,8 @@ from src.context.metric_registry import (
     is_applicable_to_company,
 )
 from src.guardrails.confidence import (
+    ConfidenceLevel,
+    ConfidenceScore,
     compute_confidence,
     score_ambiguity,
     score_calculation_complexity,
@@ -50,14 +52,44 @@ from src.guardrails.confidence import (
     score_temporal_relevance,
 )
 from src.guardrails.provenance import ProvenanceRecord, build_fiscal_label
-from src.guardrails.scope_guard import ScopeLevel, check_scope
-from src.investigation.decomposition import decompose_metric_change, has_decomposition
+from src.guardrails.scope_guard import ScopeLevel, ScopeResult, check_scope
+from src.guardrails.validation import validate_faithfulness
+from src.investigation.decomposition import (
+    DecompositionResult,
+    decompose_metric_change,
+    has_decomposition,
+)
 from src.investigation.follow_ups import generate_contextual_follow_ups
 from src.investigation.session import InvestigationDepth, InvestigationSession
 
 logger = logging.getLogger(__name__)
 
 load_dotenv()
+
+
+@dataclass
+class ContextPackage:
+    """All assembled context for a query — the explicit input to LLM and confidence scoring."""
+
+    context_parts: list[str] = field(default_factory=list)
+    data_context: str = ""
+    provenance: ProvenanceRecord = field(default_factory=ProvenanceRecord)
+    retrieved_metrics: list[str] = field(default_factory=list)
+    relevant_metrics: list[str] = field(default_factory=list)
+    comparison_warnings: list[str] = field(default_factory=list)
+    decomposition_result: DecompositionResult | None = None
+    tickers: list[str] = field(default_factory=list)
+    scope: ScopeResult | None = None
+    depth: InvestigationDepth = InvestigationDepth.SUMMARY
+
+    @property
+    def answer_metrics(self) -> list[str]:
+        return self.relevant_metrics or self.retrieved_metrics
+
+    def build_system_prompt(self) -> str:
+        context_str = "\n\n".join(self.context_parts)
+        return SYSTEM_PROMPT.format(context=context_str)
+
 
 SYSTEM_PROMPT = """\
 You are LedgerAI, a financial analysis agent that answers questions \
@@ -173,7 +205,6 @@ class LedgerAIAgent:
             last_follow_ups = self.session.get_last_follow_ups()
             if follow_up_idx < len(last_follow_ups):
                 selected = last_follow_ups[follow_up_idx]
-                # Strip any [decompose]/[analyze] tags for the actual query
                 user_query = selected.split(" [")[0]
                 logger.info(f"Follow-up selected: {user_query}")
 
@@ -187,7 +218,106 @@ class LedgerAIAgent:
         if scope.level == ScopeLevel.PARTIAL and not scope.detected_tickers:
             return build_refusal_response(scope.reason, scope.suggestion)
 
-        # Step 2: Gather data and context
+        # Step 2: Context Assembly (retrieval + enrichment → ContextPackage)
+        ctx = self._assemble_context(user_query, scope)
+
+        # Step 3: Pre-LLM Confidence Check — bail out or retry if too low
+        confidence = self._compute_confidence(ctx)
+
+        if not confidence.should_answer:
+            logger.info(f"Confidence REFUSE ({confidence.score:.2f}) — bailing out")
+            return AgentResponse(
+                answer=(
+                    "I don't have sufficient data to answer this reliably. "
+                    f"{confidence.summary} "
+                    "Try asking about a specific metric (revenue, margins, EPS, etc.) "
+                    "for one of these companies: AAPL, MSFT, GOOGL, AMZN, JPM."
+                ),
+                confidence=confidence,
+                is_refusal=True,
+                warnings=ctx.comparison_warnings,
+            )
+
+        # If LOW confidence due to poor data availability, retry with broader metrics
+        data_factor = next((f for f in confidence.factors if f.name == "data_availability"), None)
+        if confidence.level == ConfidenceLevel.LOW and data_factor and data_factor.score < 0.3:
+            logger.info("Low data availability — retrying with broader default metrics")
+            ctx = self._assemble_context(user_query, scope, force_broad_metrics=True)
+            confidence = self._compute_confidence(ctx)
+
+        # Step 4: LLM Call (optional) or build data-driven answer
+        system = ctx.build_system_prompt()
+        llm_response = self._call_llm(system, user_query)
+        used_llm = False
+
+        if llm_response:
+            answer_text = llm_response
+            used_llm = True
+        else:
+            metrics = ctx.answer_metrics or ctx.retrieved_metrics
+            answer_text = self._build_data_answer(
+                user_query, ctx.tickers, metrics, ctx.data_context, ctx.provenance
+            )
+
+        # Step 5: Faithfulness Validation (LLM responses only)
+        if used_llm:
+            faith = validate_faithfulness(answer_text, ctx.provenance)
+            if not faith.is_valid:
+                logger.warning(
+                    f"Faithfulness check failed: {faith.errors} — "
+                    "falling back to data-driven answer"
+                )
+                metrics = ctx.answer_metrics or ctx.retrieved_metrics
+                answer_text = self._build_data_answer(
+                    user_query, ctx.tickers, metrics, ctx.data_context, ctx.provenance
+                )
+            elif faith.warnings:
+                answer_text += "\n\n**Verification Notes**\n" + "\n".join(
+                    f"- {w}" for w in faith.warnings
+                )
+
+        # Step 6: Add uncertainty disclaimer for LOW confidence
+        if confidence.level == ConfidenceLevel.LOW:
+            answer_text = (
+                "**Note: This answer has significant uncertainty.** "
+                f"{confidence.summary}\n\n{answer_text}"
+            )
+
+        # Step 7: Follow-ups and session recording
+        follow_ups = generate_contextual_follow_ups(
+            self.conn, ctx.tickers, ctx.answer_metrics, user_query
+        )
+        self.session.record_turn(
+            query=user_query,
+            tickers=ctx.tickers,
+            metrics=ctx.answer_metrics,
+            depth=ctx.depth,
+            follow_ups=follow_ups,
+            decomposition_metric=(
+                ctx.decomposition_result.metric_id if ctx.decomposition_result else None
+            ),
+        )
+
+        return AgentResponse(
+            answer=answer_text,
+            methodology=ctx.provenance.format_calculations() if ctx.provenance else None,
+            sources=ctx.provenance.format_sources() if ctx.provenance else None,
+            confidence=confidence,
+            follow_ups=follow_ups,
+            warnings=ctx.comparison_warnings,
+            decomposition=ctx.decomposition_result,
+        )
+
+    def _assemble_context(
+        self,
+        user_query: str,
+        scope: ScopeResult,
+        force_broad_metrics: bool = False,
+    ) -> ContextPackage:
+        """Retrieve data and assemble all context into a ContextPackage.
+
+        Explicit dependency: retrieval → assembly → (LLM + confidence).
+        """
         tickers = scope.detected_tickers
         context_parts = []
         query_lower = user_query.lower()
@@ -204,8 +334,10 @@ class LedgerAIAgent:
             if latest:
                 context_parts.append(f"Latest data for {ticker}: period ending {latest}")
 
-        # Step 3: Retrieve relevant financial data
-        data_context, provenance, retrieved_metrics = self._retrieve_data(user_query, tickers)
+        # Retrieve financial data
+        data_context, provenance, retrieved_metrics = self._retrieve_data(
+            user_query, tickers, force_broad=force_broad_metrics
+        )
         if data_context:
             context_parts.append(f"## Financial Data\n{data_context}")
 
@@ -243,13 +375,12 @@ class LedgerAIAgent:
         if session_context:
             context_parts.append(session_context)
 
-        # Step 3b: Decomposition (if query asks "why" about a metric)
+        # Decomposition (if query asks "why" about a metric)
         depth = self.session.classify_depth(
             user_query, tickers, relevant_metrics or retrieved_metrics
         )
         decomposition_result = None
         if depth == InvestigationDepth.DECOMPOSITION:
-            # Find which metric to decompose
             decomp_metrics = relevant_metrics or retrieved_metrics
             for metric_id in decomp_metrics:
                 if has_decomposition(metric_id):
@@ -259,78 +390,54 @@ class LedgerAIAgent:
                         context_parts.append(f"## Decomposition Analysis\n{result.format_text()}")
                         break
 
-        # Step 4: LLM Call (optional) or build data-driven answer
-        context_str = "\n\n".join(context_parts)
-        system = SYSTEM_PROMPT.format(context=context_str)
-
-        llm_response = self._call_llm(system, user_query)
-
-        if llm_response:
-            answer_text = llm_response
-        else:
-            # Use relevant_metrics (from query text) if retrieved_metrics is empty
-            answer_metrics = relevant_metrics or retrieved_metrics
-            if not answer_metrics:
-                answer_metrics = retrieved_metrics
-            answer_text = self._build_data_answer(
-                user_query, tickers, answer_metrics, data_context, provenance
-            )
-
-        # Step 5: Confidence Scoring
-        available_for_first = (
-            get_available_metrics_for_company(self.conn, tickers[0]) if tickers else []
+        return ContextPackage(
+            context_parts=context_parts,
+            data_context=data_context,
+            provenance=provenance,
+            retrieved_metrics=retrieved_metrics,
+            relevant_metrics=relevant_metrics,
+            comparison_warnings=comparison_warnings,
+            decomposition_result=decomposition_result,
+            tickers=tickers,
+            scope=scope,
+            depth=depth,
         )
-        latest = get_latest_period(self.conn, tickers[0]) if tickers else None
 
+    def _compute_confidence(self, ctx: ContextPackage) -> ConfidenceScore:
+        """Compute confidence score from assembled context."""
+        available_for_first = (
+            get_available_metrics_for_company(self.conn, ctx.tickers[0]) if ctx.tickers else []
+        )
+        latest = get_latest_period(self.conn, ctx.tickers[0]) if ctx.tickers else None
+
+        metrics = ctx.relevant_metrics or ctx.retrieved_metrics
         factors = [
-            score_data_availability(
-                relevant_metrics or retrieved_metrics,
-                available_for_first,
-            ),
+            score_data_availability(metrics, available_for_first),
             score_calculation_complexity(
-                is_direct_lookup=len(relevant_metrics) <= 1
-                and not any(kw in query_lower for kw in ("margin", "ratio", "growth", "compare")),
-                num_components=sum(
-                    len(get_metric(m).components) for m in relevant_metrics if get_metric(m)
+                is_direct_lookup=len(ctx.relevant_metrics) <= 1
+                and not any(
+                    m_id in ("gross_margin", "operating_margin", "net_margin", "debt_to_equity")
+                    for m_id in metrics
                 ),
-                requires_cross_period="trend" in query_lower or "growth" in query_lower,
-                requires_cross_company=len(tickers) > 1,
+                num_components=sum(
+                    len(get_metric(m).components) for m in ctx.relevant_metrics if get_metric(m)
+                ),
+                requires_cross_period=bool(ctx.retrieved_metrics)
+                and any(get_metric(m) is not None for m in ctx.retrieved_metrics),
+                requires_cross_company=len(ctx.tickers) > 1,
             ),
             score_temporal_relevance(
-                data_period_end=provenance.data_freshness if provenance else None,
+                data_period_end=ctx.provenance.data_freshness if ctx.provenance else None,
                 latest_available=latest,
             ),
-            score_comparability(tickers, comparison_warnings),
+            score_comparability(ctx.tickers, ctx.comparison_warnings),
             score_ambiguity(
-                has_single_interpretation=scope.level == ScopeLevel.IN_SCOPE,
-                metric_count=len(relevant_metrics) if relevant_metrics else 1,
+                has_single_interpretation=ctx.scope is not None
+                and ctx.scope.level == ScopeLevel.IN_SCOPE,
+                metric_count=len(ctx.relevant_metrics) if ctx.relevant_metrics else 1,
             ),
         ]
-        confidence = compute_confidence(factors)
-
-        # Step 6: Build response with contextual follow-ups
-        answer_metrics = relevant_metrics or retrieved_metrics
-        follow_ups = generate_contextual_follow_ups(self.conn, tickers, answer_metrics, user_query)
-
-        # Record this turn in the session
-        self.session.record_turn(
-            query=user_query,
-            tickers=tickers,
-            metrics=answer_metrics,
-            depth=depth,
-            follow_ups=follow_ups,
-            decomposition_metric=(decomposition_result.metric_id if decomposition_result else None),
-        )
-
-        return AgentResponse(
-            answer=answer_text,
-            methodology=provenance.format_calculations() if provenance else None,
-            sources=provenance.format_sources() if provenance else None,
-            confidence=confidence,
-            follow_ups=follow_ups,
-            warnings=comparison_warnings,
-            decomposition=decomposition_result,
-        )
+        return compute_confidence(factors)
 
     def _build_data_answer(
         self,
@@ -555,7 +662,7 @@ class LedgerAIAgent:
         return results
 
     def _retrieve_data(
-        self, query: str, tickers: list[str]
+        self, query: str, tickers: list[str], force_broad: bool = False
     ) -> tuple[str, ProvenanceRecord, list[str]]:
         """Retrieve relevant financial data based on the query."""
         provenance = ProvenanceRecord()
@@ -589,13 +696,21 @@ class LedgerAIAgent:
         }
 
         target_metrics = []
-        for metric_id, keywords in metric_keywords.items():
-            if any(kw in query_lower for kw in keywords):
-                target_metrics.append(metric_id)
+        if not force_broad:
+            for metric_id, keywords in metric_keywords.items():
+                if any(kw in query_lower for kw in keywords):
+                    target_metrics.append(metric_id)
 
-        # If no specific metric found, provide a broad overview
+        # If no specific metric found (or force_broad), provide a broad overview
         if not target_metrics:
-            target_metrics = ["revenue", "net_income", "eps_diluted"]
+            target_metrics = [
+                "revenue",
+                "net_income",
+                "eps_diluted",
+                "gross_margin",
+                "operating_income",
+                "operating_cash_flow",
+            ]
 
         # Determine if trend or single period
         is_trend = any(

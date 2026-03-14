@@ -15,22 +15,33 @@ flowchart TD
     FS -->|No| SG
     EX --> SG[Scope Guard]
     SG -->|Out of scope| R[Graceful Refusal\nwith suggestions]
-    SG -->|In scope| RET[Data Retrieval]
+    SG -->|In scope| CA[Context Assembly\nContextPackage]
+    CA --> RET[Data Retrieval]
     RET --> SQL[(SQLite)]
-    RET --> CA[Context Assembly]
     CA --> MR[Metric Registry]
     CA --> DR[Domain Rules]
     CA --> EC[Entity Context]
     CA --> SC[Session Context\nprior turns]
-    CA --> LLM[LLM Call\nor Deterministic Fallback]
-    LLM --> CS[Confidence Scoring]
-    CS --> DC{Decomposition\nquery?}
-    DC -->|Yes| DEC[Metric Decomposition]
-    DC -->|No| FU[Follow-up Generation]
-    DEC --> FU
+    CA --> DEC2{Decomposition\nquery?}
+    DEC2 -->|Yes| DEC[Metric Decomposition]
+    DEC2 -->|No| CS
+    DEC --> CS[Pre-LLM\nConfidence Check]
+    CS -->|REFUSE| BAIL[Insufficient Confidence\nRefusal]
+    CS -->|LOW + poor data| RETRY[Retry with\nbroader metrics]
+    RETRY --> CS2[Recompute\nConfidence]
+    CS -->|OK| LLM
+    CS2 --> LLM[LLM Call\nor Deterministic Fallback]
+    LLM --> FV{Faithfulness\nValidation}
+    FV -->|Mismatch > 20%| FALLBACK[Fall back to\ndata-driven answer]
+    FV -->|OK| DISC{LOW\nconfidence?}
+    FALLBACK --> DISC
+    DISC -->|Yes| WARN[Prepend uncertainty\ndisclaimer]
+    DISC -->|No| FU
+    WARN --> FU[Follow-up Generation]
     FU --> SR[Structured Response]
 
     style R fill:#f44,color:#fff
+    style BAIL fill:#f44,color:#fff
     style SR fill:#4a4,color:#fff
 ```
 
@@ -46,45 +57,58 @@ User Query
        │ In scope
        ▼
 ┌──────────────────────────────────────┐
-│         Retrieval Layer              │
-│  ┌─────────┐     ┌────────────────┐ │
-│  │   SQL   │     │ Vector Search  │ │
-│  │ (SQLite)│     │  (ChromaDB)    │ │
-│  └────┬────┘     └───────┬────────┘ │
-└───────┼──────────────────┼──────────┘
-        │                  │
-        ▼                  ▼
-┌──────────────────────────────────────┐
-│       Context Assembly               │
+│    Context Assembly → ContextPackage │
+│  ┌─────────────────────────────────┐ │
+│  │     Retrieval Layer             │ │
+│  │  SQLite ←──── keyword matching  │ │
+│  └─────────────┬───────────────────┘ │
 │  + Metric definitions & formulas     │
 │  + Domain rules (fiscal years, etc.) │
 │  + Entity context (segments, events) │
 │  + Comparability rules               │
 │  + Investigation session context     │
+│  + Decomposition analysis (if "why") │
+└──────────────┬───────────────────────┘
+               │
+               ▼
+┌──────────────────────────────────────┐
+│    Pre-LLM Confidence Scoring        │
+│  + Data availability       (35%)     │
+│  + Calculation complexity  (20%)     │
+│  + Temporal relevance      (15%)     │
+│  + Comparability validity  (15%)     │
+│  + Query ambiguity         (15%)     │
+│                                      │
+│  REFUSE (< 0.2) → bail out          │
+│  LOW + poor data → retry broader     │
+│  LOW/MEDIUM/HIGH → proceed           │
 └──────────────┬───────────────────────┘
                │
                ▼
 ┌──────────────────────────────────────┐
 │         LLM Reasoning                │
-│  Single call with full context       │
+│  Single call with ContextPackage     │
 │  (Gemini / Anthropic Claude)         │
 │  OR deterministic fallback           │
 └──────────────┬───────────────────────┘
                │
                ▼
 ┌──────────────────────────────────────┐
-│       Confidence Scoring             │
-│  + Data availability       (35%)     │
-│  + Calculation complexity  (20%)     │
-│  + Temporal relevance      (15%)     │
-│  + Comparability validity  (15%)     │
-│  + Query ambiguity         (15%)     │
+│    Faithfulness Validation           │
+│  Extract $amounts and %ages from     │
+│  LLM output, cross-reference vs     │
+│  provenance source data              │
+│                                      │
+│  > 20% mismatch → fall back to      │
+│    data-driven answer                │
+│  5-20% mismatch → append warning    │
 └──────────────┬───────────────────────┘
                │
                ▼
 ┌──────────────────────────────────────┐
 │       Investigation Layer            │
-│  + Metric decomposition (if "why")   │
+│  + LOW confidence → uncertainty      │
+│    disclaimer prepended              │
 │  + Contextual follow-up generation   │
 │  + Session state recording           │
 └──────────────┬───────────────────────┘
@@ -92,10 +116,11 @@ User Query
                ▼
 ┌──────────────────────────────────────┐
 │       Structured Response            │
-│  + Answer                            │
+│  + Answer (with disclaimer if LOW)   │
 │  + Methodology (show the math)       │
 │  + Sources (filing references)       │
 │  + Confidence level & score          │
+│  + Verification notes (if flagged)   │
 │  + Decomposition (if triggered)      │
 │  + Follow-up suggestions             │
 └──────────────────────────────────────┘
@@ -114,7 +139,8 @@ User Query
 
 ### Guardrails
 - **Scope Guard** (`src/guardrails/scope_guard.py`) — classifies queries as in-scope, partial, or out-of-scope using regex patterns
-- **Confidence Scoring** (`src/guardrails/confidence.py`) — 5-factor weighted evaluation producing calibrated scores
+- **Confidence Scoring** (`src/guardrails/confidence.py`) — 5-factor weighted evaluation producing calibrated scores. Now runs *before* the LLM call with bail-out paths: REFUSE returns an explicit insufficient-confidence refusal; LOW with poor data availability retries with broader metrics; LOW after retry adds an uncertainty disclaimer
+- **Faithfulness Validation** (`src/guardrails/validation.py`) — extracts dollar amounts and percentages from LLM output, cross-references against provenance source data. Mismatches >20% trigger fallback to data-driven answer; 5-20% mismatches append verification notes
 - **Provenance Tracking** (`src/guardrails/provenance.py`) — tags every claim with source filing and calculation chain
 
 ### Investigation Layer
@@ -123,8 +149,9 @@ User Query
 - **Session State** (`src/investigation/session.py`) — multi-turn conversation tracking with depth classification (summary → detail → comparison → decomposition)
 
 ### Agent Core
-- **Orchestration** (`src/agent/core.py`) — ~150 lines of pipeline logic connecting all components
-- **Retrieval** (`src/agent/retrieval.py`) — SQL queries for financial data, derived metric calculations
+- **Orchestration** (`src/agent/core.py`) — pipeline logic connecting all components via `ContextPackage` dataclass. The `_assemble_context()` method makes the retrieval → assembly → LLM dependency chain explicit
+- **ContextPackage** (`src/agent/core.py`) — dataclass holding all assembled context (data, provenance, metrics, warnings, decomposition, tickers, scope) — the single input to both confidence scoring and LLM
+- **Retrieval** (`src/agent/retrieval.py`) — SQL queries for financial data, derived metric calculations, with `force_broad` mode for low-confidence retries
 - **Response** (`src/agent/response.py`) — structured output formatting
 
 ## Technology Stack
@@ -137,7 +164,7 @@ User Query
 | API | FastAPI | Async, auto-docs, Pydantic integration |
 | UI | Chainlit | Polished chat UI with actions, starters, sidebar elements |
 | Parsing | BeautifulSoup + lxml | SEC filings are HTML/XML |
-| Tests | pytest | 168 unit + integration tests |
+| Tests | pytest | 187 unit + integration tests |
 | Eval | Custom suite | 53 cases across 5 categories |
 
 ## Design Constraints
