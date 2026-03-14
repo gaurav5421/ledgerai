@@ -81,6 +81,7 @@ class ContextPackage:
     tickers: list[str] = field(default_factory=list)
     scope: ScopeResult | None = None
     depth: InvestigationDepth = InvestigationDepth.SUMMARY
+    is_trend: bool = False
 
     @property
     def answer_metrics(self) -> list[str]:
@@ -171,6 +172,49 @@ class LedgerAIAgent:
         """Start a fresh investigation session."""
         self.session = InvestigationSession()
 
+    def _classify_query_intent(self, query: str) -> dict:
+        """Classify query intent using LLM when keyword matching fails.
+
+        Returns dict with:
+            is_trend: bool — does the query ask for multi-period data?
+            target_metrics: list[str] — metric IDs to retrieve
+        """
+        if not self.llm_client:
+            return {"is_trend": False, "target_metrics": []}
+
+        system = (
+            "You classify financial queries. Respond with ONLY a JSON object, "
+            "no markdown, no explanation.\n\n"
+            "Determine:\n"
+            "1. is_trend: true if the query asks for data across multiple "
+            "periods/quarters/years, comparisons over time, historical data, "
+            "or breakdown by quarter/year. false if asking about a single "
+            "point-in-time value.\n"
+            "2. target_metrics: list of metric IDs from this set that the "
+            "query is asking about: revenue, net_income, gross_profit, "
+            "gross_margin, operating_income, operating_margin, net_margin, "
+            "eps_basic, eps_diluted, operating_cash_flow, capex, "
+            "free_cash_flow, total_assets, total_equity, long_term_debt, "
+            "current_ratio, debt_to_equity, rd_expense, sga_expense, "
+            "net_interest_income, shares_outstanding\n\n"
+            'Example: {"is_trend": true, "target_metrics": ["revenue"]}'
+        )
+
+        try:
+            import json
+
+            raw = self._call_llm(system, query)
+            if raw:
+                # Strip markdown code fences if present
+                raw = raw.strip()
+                if raw.startswith("```"):
+                    raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0]
+                return json.loads(raw.strip())
+        except (json.JSONDecodeError, Exception) as e:
+            logger.debug(f"Intent classification failed: {e}")
+
+        return {"is_trend": False, "target_metrics": []}
+
     def _call_llm(self, system: str, user_query: str) -> str | None:
         """Call the LLM if available. Returns response text or None."""
         if not self.llm_client:
@@ -256,7 +300,12 @@ class LedgerAIAgent:
         else:
             metrics = ctx.answer_metrics or ctx.retrieved_metrics
             answer_text = self._build_data_answer(
-                user_query, ctx.tickers, metrics, ctx.data_context, ctx.provenance
+                user_query,
+                ctx.tickers,
+                metrics,
+                ctx.data_context,
+                ctx.provenance,
+                is_trend=ctx.is_trend,
             )
 
         # Step 5: Faithfulness Validation (LLM responses only)
@@ -335,7 +384,7 @@ class LedgerAIAgent:
                 context_parts.append(f"Latest data for {ticker}: period ending {latest}")
 
         # Retrieve financial data
-        data_context, provenance, retrieved_metrics = self._retrieve_data(
+        data_context, provenance, retrieved_metrics, is_trend = self._retrieve_data(
             user_query, tickers, force_broad=force_broad_metrics
         )
         if data_context:
@@ -401,6 +450,7 @@ class LedgerAIAgent:
             tickers=tickers,
             scope=scope,
             depth=depth,
+            is_trend=is_trend,
         )
 
     def _compute_confidence(self, ctx: ContextPackage) -> ConfidenceScore:
@@ -446,30 +496,10 @@ class LedgerAIAgent:
         metrics: list[str],
         data_context: str,
         provenance: ProvenanceRecord,
+        is_trend: bool = False,
     ) -> str:
         """Build a structured answer from retrieved data without LLM."""
-        query_lower = query.lower()
         parts = []
-
-        is_trend = any(
-            kw in query_lower
-            for kw in [
-                "trend",
-                "over time",
-                "last",
-                "quarters",
-                "history",
-                "trended",
-                "by quarter",
-                "quarterly",
-                "each quarter",
-                "per quarter",
-                "q1",
-                "q2",
-                "q3",
-                "q4",
-            ]
-        )
         is_comparison = len(tickers) > 1
 
         for ticker in tickers:
@@ -678,7 +708,7 @@ class LedgerAIAgent:
 
     def _retrieve_data(
         self, query: str, tickers: list[str], force_broad: bool = False
-    ) -> tuple[str, ProvenanceRecord, list[str]]:
+    ) -> tuple[str, ProvenanceRecord, list[str], bool]:
         """Retrieve relevant financial data based on the query."""
         provenance = ProvenanceRecord()
         data_lines = []
@@ -727,26 +757,44 @@ class LedgerAIAgent:
                 "operating_cash_flow",
             ]
 
-        # Determine if trend or single period
-        is_trend = any(
-            kw in query_lower
-            for kw in [
-                "trend",
-                "over time",
-                "last",
-                "quarters",
-                "history",
-                "trended",
-                "by quarter",
-                "quarterly",
-                "each quarter",
-                "per quarter",
-                "q1",
-                "q2",
-                "q3",
-                "q4",
-            ]
-        )
+        # Determine if trend or single period — keyword fast path
+        trend_keywords = [
+            "trend",
+            "over time",
+            "last",
+            "quarters",
+            "history",
+            "trended",
+            "by quarter",
+            "quarterly",
+            "each quarter",
+            "per quarter",
+            "q1",
+            "q2",
+            "q3",
+            "q4",
+        ]
+        is_trend = any(kw in query_lower for kw in trend_keywords)
+
+        # LLM fallback: if keywords didn't match for either metrics or trend,
+        # ask the LLM to classify the intent
+        if not is_trend or not target_metrics:
+            intent = self._classify_query_intent(query)
+            if not is_trend:
+                is_trend = intent.get("is_trend", False)
+            if not target_metrics and intent.get("target_metrics"):
+                target_metrics = [
+                    m for m in intent["target_metrics"] if m in metric_keywords or force_broad
+                ]
+            if not target_metrics:
+                target_metrics = [
+                    "revenue",
+                    "net_income",
+                    "eps_diluted",
+                    "gross_margin",
+                    "operating_income",
+                    "operating_cash_flow",
+                ]
 
         for ticker in tickers:
             for metric_id in target_metrics:
@@ -812,7 +860,7 @@ class LedgerAIAgent:
                                 provenance.data_freshness = calc_prov.data_freshness
                             data_lines.append(f"{ticker} — {metric_id} (calculated): {value:.4f}")
 
-        return "\n".join(data_lines), provenance, list(set(retrieved_metrics))
+        return "\n".join(data_lines), provenance, list(set(retrieved_metrics)), is_trend
 
     def close(self):
         self.conn.close()
